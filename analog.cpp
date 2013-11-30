@@ -10,16 +10,41 @@
    Written by Limor Fried/Ladyada for Adafruit Industries.
    BSD license, check license.txt for more information
    All text above must be included in any redistribution
+	 
+	 Updated by Eugene Skopal to facilitate re-calibration.
 ****************************************/
 
 #include <Arduino.h>
-#include <SoftwareSerial.h>
+#include "analog.h"
 
-extern SoftwareSerial ss;
 extern uint16_t calibration;
 
-int readVCC(void) {
-  ADMUX = 0x0C; // read VBG
+// Compute the VCC given the current VBG (voltage-band-gap) ADC reading and the actual VBG voltage
+
+uint16_t getVCC(uint16_t vbgAdc, uint16_t vbgActual) {
+  uint32_t temp = vbgActual;
+  temp *= 1024;
+  temp /= vbgAdc;
+
+  return (uint16_t)temp;
+}
+
+// Compute the actual VBG value given the VBG ADC reading
+//  and assuming we have a 5.0v supply
+
+uint16_t getCal5v(uint16_t vbgAdc) {
+  uint32_t  temp;
+  temp = 5000;        // Assume Vcc is 5v
+  temp *= vbgAdc;
+  temp /= 1024;
+  return (uint16_t)temp;
+}
+
+uint16_t readVBG(void) {
+  /* The Band Gap Reference Voltage is supposed to be 1.1 volts
+      but according to the specifications it can range from 1.0 to 1.2 volts */
+  
+  ADMUX = 0x0C;     // read VBG
   ADCSRA = _BV(ADEN) | _BV(ADPS0) | _BV(ADPS1) | _BV(ADPS2);
 
   delay(10);
@@ -35,24 +60,19 @@ int readVCC(void) {
 
   low = ADCL;
   high = ADCH;
-  int32_t reply = high;
+  
+  uint16_t reply = high;
   reply <<= 8;
   reply |= low;
-  //ss.println(reply);
-  uint32_t temp;
-  if (calibration != 0xFFFF) {
-    temp = calibration;  // the 'true' mV reading
-  } else {
-    temp = 1100;   // its about 1100mV
-  }
-  temp *= 1024;
-  temp /= reply;
-  reply = temp;
 
   return reply;
 }
 
-int readCurrent(void) {
+uint16_t readVCC(void) {
+  return getVCC(readVBG(), calibration);
+}
+
+uint16_t readCurrent(void) {
   ADMUX = 3 | _BV(REFS1); // read PB3 (output from sensor)
   ADCSRA = _BV(ADEN) | _BV(ADPS0) | _BV(ADPS1) | _BV(ADPS2);
 
@@ -66,13 +86,8 @@ int readCurrent(void) {
 
   int32_t reply = ADC;
 
-   if (calibration != 0xFFFF) {
-    reply *= calibration;  // the 'true' mV reading
-  } else {
-    reply *= 1100;  // its about 1100mV
-  }
+  reply *= calibration;  // the 'true' mV reading
   reply /= 1024;
 
   return reply;
 }
-
