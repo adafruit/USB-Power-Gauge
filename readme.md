@@ -1,5 +1,26 @@
 USB Power Gauge updates by Eugene Skopal
 ===============
+Version 2.1 -- 01-Dec-2013
+--------------------------
+Observations
+------------
+When testing the USB Power Gauge I noticed that when the voltage was low, the green LED went out as it was designed to do.  I found this confusing because with no load, it appeared that there was no power, not that the voltage was too low.
+
+Also, when looking for the appropriate place to post a notice about this new firmware, I noticed that others had asked for the power gauge to support 2A (10w) power supplies (for Apple IPAD).
+
+Code Changes
+------------
+  1) Compute the calibration value for 2.56v reference
+  
+  2) Read currents up to 2.56 Amps
+  
+  3) Flash Green LED at 4 hz if voltage is less than 4.5 volts
+  
+  4) Blink Green LED at .5 hz if watts > 5.125, display watts as 6,7,8,9,10
+  
+  5) Blink Flashing Green LED if low voltage and high watts
+      (Flashes 4 times in one second, then off for one second)
+
 Version 2.0 -- 30-Nov-2013
 --------------------------
 Original Code Observations

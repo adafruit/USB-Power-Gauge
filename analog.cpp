@@ -17,7 +17,8 @@
 #include <Arduino.h>
 #include "analog.h"
 
-extern uint16_t calibration;
+extern uint16_t calVbg11;
+extern uint16_t calVbg256;
 
 // Compute the VCC given the current VBG (voltage-band-gap) ADC reading and the actual VBG voltage
 
@@ -40,11 +41,11 @@ uint16_t getCal5v(uint16_t vbgAdc) {
   return (uint16_t)temp;
 }
 
-uint16_t readVBG(void) {
+uint16_t readVBGint(uint8_t refBits) {
   /* The Band Gap Reference Voltage is supposed to be 1.1 volts
       but according to the specifications it can range from 1.0 to 1.2 volts */
   
-  ADMUX = 0x0C;     // read VBG
+  ADMUX = 0x0C | refBits;     // read VBG
   ADCSRA = _BV(ADEN) | _BV(ADPS0) | _BV(ADPS1) | _BV(ADPS2);
 
   delay(10);
@@ -68,26 +69,55 @@ uint16_t readVBG(void) {
   return reply;
 }
 
-uint16_t readVCC(void) {
-  return getVCC(readVBG(), calibration);
+uint16_t readVBG(void) {
+  return readVBGint(0);
 }
 
-uint16_t readCurrent(void) {
-  ADMUX = 3 | _BV(REFS1); // read PB3 (output from sensor)
+uint16_t readXfer256(void) {
+  return readVBGint(_BV(REFS2) | _BV(REFS1));
+}
+
+uint16_t readVCC(void) {
+  return getVCC(readVBGint(0), calVbg11);
+}
+
+uint16_t readCurrentInt(uint8_t refBits) {
+  ADMUX = 3 | refBits; // read PB3 (output from sensor)
   ADCSRA = _BV(ADEN) | _BV(ADPS0) | _BV(ADPS1) | _BV(ADPS2);
 
   delay(10);
   ADCSRA |= _BV(ADSC);
   while (ADCSRA & _BV(ADSC));
+  uint8_t low = ADCL;
+  uint8_t high = ADCH;
   delay(10);
   // do a second conversion
   ADCSRA |= _BV(ADSC);
   while (ADCSRA & _BV(ADSC));
 
-  int32_t reply = ADC;
-
-  reply *= calibration;  // the 'true' mV reading
-  reply /= 1024;
+  low = ADCL;
+  high = ADCH;
+  
+  uint16_t reply = high;
+  reply <<= 8;
+  reply |= low;
 
   return reply;
 }
+
+uint16_t readCurrent(void) {
+  uint16_t curAdc = readCurrentInt(_BV(REFS1));    // Read current against 1.1v
+  uint16_t calValue = calVbg11;
+
+  if (curAdc > 1010) {           // If we are near the limit
+    curAdc = readCurrentInt(_BV(REFS2) | _BV(REFS1));   // Read the current against 2.56v
+    calValue = calVbg256;
+  }
+  
+  uint32_t reply = curAdc;
+  
+  reply *= calValue;
+  reply /= 1024;
+  
+  return reply;
+}      

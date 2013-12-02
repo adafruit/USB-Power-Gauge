@@ -10,24 +10,31 @@
    Written by Limor Fried/Ladyada for Adafruit Industries.
    BSD license, check license.txt for more information
    All text above must be included in any redistribution
-   
+
+   Updated by Eugene Skopal on 1-Dec-2013:
+    1) Compute the calibration value for 2.56v reference
+    2) Read currents up to 2.56 Amps
+    3) Flash Green LED at 4 hz if voltage is less than 4.5 volts
+    4) Blink Green LED at .5 hz if watts > 5.125, display watts as 6,7,8,9,10
+    5) Blink Flashing Green LED if low voltage and high watts
+        (Flashes 4 times in one second, then off for one second)
    Updated by Eugene Skopal on 29-Nov-2013:
-   1) Use TimerSerial a timer based UART simulation so that the
+    1) Use TimerSerial a timer based UART simulation so that the
       charlieplexed lights don't flicker when outputting text.
       (The SoftwareSerial code disables interrupts when outputting characters
-       causing the charlieplexing routine to stall long enough for it to
-       be noticable.)
-   2) Allow the user to plug the Power Gauge into a known accurate
+        causing the charlieplexing routine to stall long enough for it to
+        be noticable.)
+    2) Allow the user to plug the Power Gauge into a known accurate
       5.0v USB port and reset the calibration value so that the 
       reported voltage levels are more accurate.
       When programming the first time, simply plug the USB Power Gauge
       into a known accurate 5.0v source immediately after programming.
       After that, you can force a recalibration by grouding the TX pin
       through a 1K resistor for 3 seconds.
-   3) Fix the LED display routines so that the LSB blue light doesn't flash
+    3) Fix the LED display routines so that the LSB blue light doesn't flash
       randomly when very low current levels are seen.
-   4) Average the ADC readings for one second to eliminate noise.
-   5) Display the peak current reading each second.
+    4) Average the ADC readings for one second to eliminate noise.
+    5) Display the peak current reading each second.
 ****************************************/
 
 // Select Trinket 16MHz, 'burn bootloader' to set fuses
@@ -43,7 +50,8 @@
 
 TimerSerial ts;           // Our Timer Based Serial Port
 
-uint16_t calibration;
+uint16_t    calVbg11;
+uint16_t    calVbg256;
 uint8_t     calCount;
 
 void allInputs(void);
@@ -70,6 +78,8 @@ uint8_t gamma[] = {0x0, 0x01, 0x03, 0x06, 0x0A, 0x10, 0x17, 0x20};
 uint8_t     txPinState = 0;
 uint8_t     txPinLowCount = 0;
 bool        updateCal = false;
+uint16_t    greenLedFlashIntervals = 0;
+uint8_t     greenLedSlowBlink = 0;
 
 void TIMER1_Handler() {
   // turn all LEDs off
@@ -125,23 +135,28 @@ void showLEDS(void) {
 }
 
 void showCal(void) {
-  ts.print(F("cal: "));
-  ts.print(calibration);
-  ts.print(" write count: ");
+  ts.print(F("cal 1.1: "));
+  ts.print(calVbg11);
+  ts.print(F("  cal 2.56: "));
+  ts.print(calVbg256);
+  ts.print("  write count: ");
   ts.print(calCount);
-  ts.print(F(" VBG adc: "));
+  ts.print(F("  VBG adc: "));
   uint16_t vbg = readVBG();
   ts.print(vbg);
-  ts.print(F(" vcc: "));
-  ts.print(getVCC(vbg, calibration));
-  ts.print(" 5v cal: ");
+  ts.print(F("  Xfer 2.56 adc: "));
+  ts.print(readXfer256());
+  ts.print(F("  vcc: "));
+  ts.print(getVCC(vbg, calVbg11));
+  ts.print("  5v cal: ");
   ts.println(getCal5v(vbg));
 }
 
-// Update the calibration constant assuming we are plugged into a 5.0v source
+// Update the calibration constants assuming we are plugged into a 5.0v source
 
 void updateCalibration(void) {
 	uint32_t vbg = 0;
+  uint32_t xfer256 = 0;
 	uint8_t  cnt = 0;
 
 	flashLEDS(2);
@@ -149,13 +164,18 @@ void updateCalibration(void) {
 	for (uint8_t i=0; i<8; i++) {
 		delay(1000/8);              // Take readings for one second
 		vbg += readVBG();
+    xfer256 += readXfer256();
 		cnt++;
 	}
 	vbg /= cnt;               // Get the average value
-	calibration = getCal5v(vbg);        // Get the new calibration value
-	EEPROM.write(0, (calibration >> 8) & 0xFF);
-	EEPROM.write(1, calibration & 0xFF);
-	EEPROM.write(2, ++calCount);
+	calVbg11 = getCal5v(vbg);        // Get the new calibration value
+  xfer256 /=cnt;                  // Get the average Xfer function
+  calVbg256 = (uint16_t)(((uint32_t)calVbg11 * 1024) / (uint16_t)xfer256);
+	EEPROM.write(0, (calVbg11 >> 8) & 0xFF);
+	EEPROM.write(1, calVbg11 & 0xFF);
+	EEPROM.write(2, (calVbg256 >> 8) & 0xFF);
+	EEPROM.write(3, calVbg256 & 0xFF);
+	EEPROM.write(4, ++calCount);
 
 	ts.print(F("** wrote "));
 	showCal();
@@ -180,13 +200,18 @@ void setup() {
 	ts.println(F("[To calibrate voltage, ground TX via 1K resistor for 3 seconds with 5.0 volt supply]"));
   
   // read calibration
-  calibration = EEPROM.read(0);
-  calibration <<= 8;
-  calibration |= EEPROM.read(1);
-  calCount = EEPROM.read(2);        // How many times has it been written
-  if ((calibration < 800) || (calibration > 1300)) {
-    calibration = 0xFFFF;       // calibration value is suspect
-    calCount = 0xFF;            // so is the count
+  calVbg11 = EEPROM.read(0);
+  calVbg11 <<= 8;
+  calVbg11 |= EEPROM.read(1);
+  calVbg256 = EEPROM.read(2);
+  calVbg256 <<= 8;
+  calVbg256 |= EEPROM.read(3);
+  calCount = EEPROM.read(4);        // How many times has it been written
+  // Check that the values are rational (datasheet 1.0 to 1.2 and 2.3 to 2.8)
+  if ( (calVbg11 < 900) || (calVbg11 > 1300) || (calVbg256 < 2200) || (calVbg256 > 2900) ) {
+    calVbg11  = 0xFFFF;       // calibration value is suspect
+    calVbg256 = 0xFFFF;
+    calCount  = 0xFF;         // so is the count
   }
   if (calCount == 0xFF) {
     calCount = 0;
@@ -250,6 +275,7 @@ void loop() {
       }
       if (txPinLowCount > 2) {
         updateCal = true;            // We want to update the Calibration value
+        greenLedFlashIntervals = (TIMERSERIAL_INTERVALS_PER_SEC / 8);	// blink 4 times per second
         litLEDs = _BV(5) | _BV(4) | _BV(3);
       }
       litLEDs |= _BV(5);
@@ -263,7 +289,8 @@ void loop() {
         updateCalibration();        // Update the calibration value
 
         updateCal = false;
-
+        greenLedFlashIntervals = 0;
+        
         vcc = 0;                    // Toss old values
         icc = 0;
         iccPeak = 0;
@@ -287,11 +314,11 @@ void loop() {
     if (icc < 100) ts.print(' ');
     if (icc < 10) ts.print(' ');
     ts.print(icc);
-    ts.print(F(" mA Ipk: "));
+    ts.print(F(" mA  Ipk: "));
     if (iccPeak < 100) ts.print(' ');
     if (iccPeak < 10) ts.print(' ');
     ts.print(iccPeak);
-    ts.print(F(" mA Watts: ")); 
+    ts.print(F(" mA  Watts: ")); 
     watt += 50; // this is essentially a way to 'round up'
     printDotDecimal(watt, 1);
     ts.println();
@@ -305,9 +332,20 @@ void loop() {
     // for OK voltages, turn on the green 'OK' LED
     if (vcc >= 4500) {
       litLEDs |= 0x1;
+      greenLedFlashIntervals = 0;
     } else {
-      litLEDs &= ~0x1;
+      // blink quickly to indicate a problem
+      greenLedFlashIntervals = (TIMERSERIAL_INTERVALS_PER_SEC / 8);	// blink 4 times per second
     }
+    if (watt > (5000 + 1000/4) ) {
+      // We are over 5000 watts enough to light the first blue led
+      if (++greenLedSlowBlink == 5) {
+        greenLedSlowBlink = 1;
+      }          
+      watt -= 5000;
+    } else {
+      greenLedSlowBlink = 0;
+    }                
 
     for (uint16_t w=1; w<6; w++) {
       if (watt > (w*1000)) {
@@ -322,15 +360,21 @@ void loop() {
       }
     }
   } else {
-    // We are showing a special state
-    if (updateCal) {
-      // Blink the Green LED if we are going to update the calibration value
-			uint8_t t = intervals / (TIMERSERIAL_INTERVALS_PER_SEC / 8);	// blink 4 times per second
-      if ((t & 1) == 0) {
-        litLEDs |= 1;
-      } else {
-				litLEDs &= ~1;
-			}
-    }
+    uint8_t blink;
+    if (greenLedSlowBlink == 0) {
+      blink = 1;
+    } else {
+      blink = greenLedSlowBlink & 1;
+    }      
+    uint8_t flash = 1;      
+    if (greenLedFlashIntervals != 0) {
+			flash = intervals / greenLedFlashIntervals;
+      flash = (flash & 1) ^ 1;    // Interval 0 is ON
+    }        
+    if ((flash && blink)) {
+      litLEDs |= 1;
+    } else {
+			litLEDs &= ~1;
+		}
   }
 }
