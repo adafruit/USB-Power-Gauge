@@ -139,7 +139,7 @@ void showCal(void) {
   ts.print(calVbg11);
   ts.print(F("  cal 2.56: "));
   ts.print(calVbg256);
-  ts.print("  write count: ");
+  ts.print(F("  write count: "));
   ts.print(calCount);
   ts.print(F("  VBG adc: "));
   uint16_t vbg = readVBG();
@@ -148,7 +148,7 @@ void showCal(void) {
   ts.print(readXfer256());
   ts.print(F("  vcc: "));
   ts.print(getVCC(vbg, calVbg11));
-  ts.print("  5v cal: ");
+  ts.print(F("  5v cal: "));
   ts.println(getCal5v(vbg));
 }
 
