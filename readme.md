@@ -1,5 +1,13 @@
 USB Power Gauge updates by Eugene Skopal
 ===============
+Version 2.2 -- 02-Dec-2013
+--------------------------
+Observations / Changes
+----------------------
+I noticed that I was just about out of memory for the updated sketch (99%) was in use.  I updated the sketch to conserve a little more memory by using only Print() and not Println().  The build shows 98% in use.
+
+I had downloaded the "trinket" support files from ADAfruit to work on the USB Power Gauge.  It occurred to me that the ATtiny85 has 8192 bytes of flash, but the sketch reported only 5310 bytes available.  This is specified in the ..\Arduino\hardware\attiny\boards.txt file that is part of the trinket support files supplied by Adafruit.  It limits the trinket sketch to 5310 bytes of memory so that the trinket bootloader is not overwritten.  Since we do not use a bootloader, there is no reason to conserve that space, so I updated the boards.txt file to include an “Adafruit USB Power Gauge” board that has 8192 bytes of memory.  You need to copy that file over the existing boards.txt, and change the sketch to use the "Adafruit USB Power Gauge" board to get access to the extra memory.  The build now shows 63% in use.
+
 Version 2.1 -- 01-Dec-2013
 --------------------------
 Observations

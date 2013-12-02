@@ -149,7 +149,8 @@ void showCal(void) {
   ts.print(F("  vcc: "));
   ts.print(getVCC(vbg, calVbg11));
   ts.print(F("  5v cal: "));
-  ts.println(getCal5v(vbg));
+  ts.print(getCal5v(vbg));
+  ts.print(F("\r\n"));
 }
 
 // Update the calibration constants assuming we are plugged into a 5.0v source
@@ -196,8 +197,8 @@ void setup() {
   // for just a tiny bit, turn all the LEDs on
   showLEDS();
 
-  ts.println(F("\r\nAdafruit USB Power Meter" " -- " __DATE__ " " __TIME__ " /ES"));
-	ts.println(F("[To calibrate voltage, ground TX via 1K resistor for 3 seconds with 5.0 volt supply]"));
+  ts.print(F("\r\nAdafruit USB Power Meter" " -- " __DATE__ " " __TIME__ " /ES\r\n"));
+	ts.print(F("[To calibrate voltage, ground TX via 1K resistor for 3 seconds with 5.0 volt supply]\r\n"));
   
   // read calibration
   calVbg11 = EEPROM.read(0);
@@ -321,7 +322,7 @@ void loop() {
     ts.print(F(" mA  Watts: ")); 
     watt += 50; // this is essentially a way to 'round up'
     printDotDecimal(watt, 1);
-    ts.println();
+    ts.print(F("\r\n"));
     iccPeak = 0;
     count = 1;
   }
