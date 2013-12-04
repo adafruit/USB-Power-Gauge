@@ -10,8 +10,8 @@
    Written by Limor Fried/Ladyada for Adafruit Industries.
    BSD license, check license.txt for more information
    All text above must be included in any redistribution
-	 
-	 Updated by Eugene Skopal to facilitate re-calibration.
+   
+   Updated by Eugene Skopal to facilitate re-calibration.
 ****************************************/
 
 #include <Arduino.h>
@@ -41,6 +41,8 @@ uint16_t getCal5v(uint16_t vbgAdc) {
   return (uint16_t)temp;
 }
 
+// Read the VBG voltage based on the reference supplied by the caller
+
 uint16_t readVBGint(uint8_t refBits) {
   /* The Band Gap Reference Voltage is supposed to be 1.1 volts
       but according to the specifications it can range from 1.0 to 1.2 volts */
@@ -69,17 +71,26 @@ uint16_t readVBGint(uint8_t refBits) {
   return reply;
 }
 
+// Read VBG based on Vcc (5v)
+
 uint16_t readVBG(void) {
   return readVBGint(0);
 }
+
+// Compute the internal transfer function from VBG (1.1v) to 2.56v
+//  by reading VBG against the 2.56v source (which is VBG itself through an OPAmp)
 
 uint16_t readXfer256(void) {
   return readVBGint(_BV(REFS2) | _BV(REFS1));
 }
 
+// Return the computed VCC based on the current VBG vs the calibrated value
+
 uint16_t readVCC(void) {
   return getVCC(readVBGint(0), calVbg11);
 }
+
+// Read the current (1V/1A) based on the reference (1.1v or 2.56v) supplied by the caller
 
 uint16_t readCurrentInt(uint8_t refBits) {
   ADMUX = 3 | refBits; // read PB3 (output from sensor)
@@ -104,6 +115,8 @@ uint16_t readCurrentInt(uint8_t refBits) {
 
   return reply;
 }
+
+// Read the current (1V/1A) choosing the reference based on the value read
 
 uint16_t readCurrent(void) {
   uint16_t curAdc = readCurrentInt(_BV(REFS1));    // Read current against 1.1v

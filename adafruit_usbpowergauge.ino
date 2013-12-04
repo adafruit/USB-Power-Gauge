@@ -64,8 +64,8 @@ uint32_t  icc;
 uint32_t  iccPeak;
 uint32_t  watt;
 uint8_t   count = 0;
-volatile	bool       doReport = false;
-volatile	uint16_t   intervals = 0;
+volatile  bool       doReport = false;
+volatile  uint16_t   intervals = 0;
 
 volatile uint8_t x = 0;
 volatile uint8_t Lidx = 0, litLEDs = 0;
@@ -113,25 +113,25 @@ void TIMER1_Handler() {
 }
 
 void flashLEDS(uint8_t count) {
-	for (uint8_t i=0; i<6; i++) Ldim[i] = MAXPWM;
-	for (uint8_t i=0; i < count ; i++) {
-		litLEDs = 0xFF;
-		delay(250);
-		litLEDs = 0;
-		delay(250);
-	}
+  for (uint8_t i=0; i<6; i++) Ldim[i] = MAXPWM;
+  for (uint8_t i=0; i < count ; i++) {
+    litLEDs = 0xFF;
+    delay(250);
+    litLEDs = 0;
+    delay(250);
+  }
 }
 
 void showLEDS(void) {
-	flashLEDS(1);
-	for (uint8_t i=0; i<6; i++) {
-		litLEDs |= _BV(i);
-		for (uint8_t p=0; p<MAXPWM; p++) {
-			Ldim[i]=p;
-			delay(2);
-		}
-	}
-	litLEDs = 0;
+  flashLEDS(1);
+  for (uint8_t i=0; i<6; i++) {
+    litLEDs |= _BV(i);
+    for (uint8_t p=0; p<MAXPWM; p++) {
+      Ldim[i]=p;
+      delay(2);
+    }
+  }
+  litLEDs = 0;
 }
 
 void showCal(void) {
@@ -156,32 +156,32 @@ void showCal(void) {
 // Update the calibration constants assuming we are plugged into a 5.0v source
 
 void updateCalibration(void) {
-	uint32_t vbg = 0;
+  uint32_t vbg = 0;
   uint32_t xfer256 = 0;
-	uint8_t  cnt = 0;
+  uint8_t  cnt = 0;
 
-	flashLEDS(2);
-	
-	for (uint8_t i=0; i<8; i++) {
-		delay(1000/8);              // Take readings for one second
-		vbg += readVBG();
+  flashLEDS(2);
+  
+  for (uint8_t i=0; i<8; i++) {
+    delay(1000/8);              // Take readings for one second
+    vbg += readVBG();
     xfer256 += readXfer256();
-		cnt++;
-	}
-	vbg /= cnt;               // Get the average value
-	calVbg11 = getCal5v(vbg);        // Get the new calibration value
+    cnt++;
+  }
+  vbg /= cnt;               // Get the average value
+  calVbg11 = getCal5v(vbg);        // Get the new calibration value
   xfer256 /=cnt;                  // Get the average Xfer function
   calVbg256 = (uint16_t)(((uint32_t)calVbg11 * 1024) / (uint16_t)xfer256);
-	EEPROM.write(0, (calVbg11 >> 8) & 0xFF);
-	EEPROM.write(1, calVbg11 & 0xFF);
-	EEPROM.write(2, (calVbg256 >> 8) & 0xFF);
-	EEPROM.write(3, calVbg256 & 0xFF);
-	EEPROM.write(4, ++calCount);
+  EEPROM.write(0, (calVbg11 >> 8) & 0xFF);
+  EEPROM.write(1, calVbg11 & 0xFF);
+  EEPROM.write(2, (calVbg256 >> 8) & 0xFF);
+  EEPROM.write(3, calVbg256 & 0xFF);
+  EEPROM.write(4, ++calCount);
 
-	ts.print(F("** wrote "));
-	showCal();
-	
-	flashLEDS(3);       // Signal that we have updated the calibration value
+  ts.print(F("** wrote "));
+  showCal();
+  
+  flashLEDS(3);       // Signal that we have updated the calibration value
   doReport = false;
   intervals = 0;      // Wait for one seconds before reporting
 }
@@ -198,7 +198,7 @@ void setup() {
   showLEDS();
 
   ts.print(F("\r\nAdafruit USB Power Meter" " -- " __DATE__ " " __TIME__ " /ES\r\n"));
-	ts.print(F("[To calibrate voltage, ground TX via 1K resistor for 3 seconds with 5.0 volt supply]\r\n"));
+  ts.print(F("[To calibrate voltage, ground TX via 1K resistor for 3 seconds with 5.0 volt supply]\r\n"));
   
   // read calibration
   calVbg11 = EEPROM.read(0);
@@ -217,8 +217,8 @@ void setup() {
   if (calCount == 0xFF) {
     calCount = 0;
   }
-	
-	showCal();
+  
+  showCal();
   
   // The first two times we startup -- write the calibration value
   //   The first time we startup, we have just been programmed, so the quality of Vcc is unknown
@@ -276,7 +276,7 @@ void loop() {
       }
       if (txPinLowCount > 2) {
         updateCal = true;            // We want to update the Calibration value
-        greenLedFlashIntervals = (TIMERSERIAL_INTERVALS_PER_SEC / 8);	// blink 4 times per second
+        greenLedFlashIntervals = (TIMERSERIAL_INTERVALS_PER_SEC / 8); // blink 4 times per second
         litLEDs = _BV(5) | _BV(4) | _BV(3);
       }
       litLEDs |= _BV(5);
@@ -335,8 +335,8 @@ void loop() {
       litLEDs |= 0x1;
       greenLedFlashIntervals = 0;
     } else {
-      // blink quickly to indicate a problem
-      greenLedFlashIntervals = (TIMERSERIAL_INTERVALS_PER_SEC / 8);	// blink 4 times per second
+      // blink quickly (flash) to indicate a problem
+      greenLedFlashIntervals = (TIMERSERIAL_INTERVALS_PER_SEC / 8); // blink 4 times per second
     }
     if (watt > (5000 + 1000/4) ) {
       // We are over 5000 watts enough to light the first blue led
@@ -361,21 +361,23 @@ void loop() {
       }
     }
   } else {
-    uint8_t blink;
+    // Show Special LED information
+
+    uint8_t blinkingLedIsOn;
     if (greenLedSlowBlink == 0) {
-      blink = 1;
+      blinkingLedIsOn = 1;
     } else {
-      blink = greenLedSlowBlink & 1;
+      blinkingLedIsOn = greenLedSlowBlink & 1;
     }      
-    uint8_t flash = 1;      
+    uint8_t flashingLedIsOn = 1;      
     if (greenLedFlashIntervals != 0) {
-			flash = intervals / greenLedFlashIntervals;
-      flash = (flash & 1) ^ 1;    // Interval 0 is ON
+      flashingLedIsOn = intervals / greenLedFlashIntervals;
+      flashingLedIsOn = (flashingLedIsOn & 1) ^ 1;    // Interval 0 is ON
     }        
-    if ((flash && blink)) {
+    if ((flashingLedIsOn && blinkingLedIsOn)) {
       litLEDs |= 1;
     } else {
-			litLEDs &= ~1;
-		}
+      litLEDs &= ~1;
+    }
   }
 }
