@@ -17,13 +17,13 @@
     by Bray++ from https://sites.google.com/site/terminalbpp/.
        
     Compile and load this program into your USB Power Gauge and let it run.  
-    It is set to alter the OSCCAL by a value of -4 which was correct for the
+    It is set to alter the OSCCAL by a value of -3 which was correct for the
     USB POWER GAUGE I received.
     Simply watch the program run for awhile in TERMINAL with its Time option checked.
     If the timestamps are occurring too soon: (e.g. 1.400 then 2.350 then 3.270) 
-      edit MY_OSCCAL_DELTA to be more negative -4 becomes -5.
+      edit MY_OSCCAL_DELTA to be more negative -3 becomes -4.
     If the timestamps are occurring too late: (e.g. 1.400 then 2.500 then 3.590) 
-      edit MY_OSCCAL_DELTA to be more positive -4 becomes -3.
+      edit MY_OSCCAL_DELTA to be more positive -3 becomes -2.
     You must also edit CAL_DATA_VERSION to a different value (e.g. E2 becomes E3) in
     order to force the OSCCAL delta calibration value to be updated.
     Once you have edited the values go back to step 1 until you see the timestamps
@@ -87,7 +87,7 @@
 
 TimerSerial ts;           // Our Timer Based Serial Port
 
-#define MY_OSCCAL_DELTA  -4
+#define MY_OSCCAL_DELTA  -3
 
 #define CAL_DATA_VERSION    0xE2      // Identifier for valid calibration information
 
@@ -407,6 +407,7 @@ void loop() {
         ts.print('0');
       }
       ts.print(hours);
+      ts.print(':');
     }
     if (minutes < 10) {
       ts.print('0');
