@@ -11,6 +11,42 @@
    BSD license, check license.txt for more information
    All text above must be included in any redistribution
 
+    --------------------------------------------------------------------------------    
+    You can now calibrate the RC Oscillator by using a terminal program that can
+    display the time each message is received in milliseconds.  I use TERMINAL
+    by Bray++ from https://sites.google.com/site/terminalbpp/.
+       
+    Compile and load this program into your USB Power Gauge and let it run.  
+    It is set to alter the OSCCAL by a value of -4 which was correct for the
+    USB POWER GAUGE I received.
+    Simply watch the program run for awhile in TERMINAL with its Time option checked.
+    If the timestamps are occurring too soon: (e.g. 1.400 then 2.350 then 3.270) 
+      edit MY_OSCCAL_DELTA to be more negative -4 becomes -5.
+    If the timestamps are occurring too late: (e.g. 1.400 then 2.500 then 3.590) 
+      edit MY_OSCCAL_DELTA to be more positive -4 becomes -3.
+    You must also edit CAL_DATA_VERSION to a different value (e.g. E2 becomes E3) in
+    order to force the OSCCAL delta calibration value to be updated.
+    Once you have edited the values go back to step 1 until you see the timestamps
+    occurring both too soon and too late.
+    Finally, you need to plug the USB POWER GAUGE into an accurate 5V USB port to reset
+    the 5V calibration value.
+    
+    There are two overlapping ranges of OSCCAL values, 0-0x7F and 0x80-0xFF.  My factory value
+    is 0x86.  If I were to set MY_OSCCAL_DELTA to -7, that would move me into the top of the 
+    other range and the oscillator would suddenly go much faster.  In that case I would then 
+    need a much larger delta (like -30) to continue to slow down the RC oscillator.
+    --------------------------------------------------------------------------------    
+       
+   Updated by Eugene Skopal on 10-Jan-2014:
+    1) Added timestamps to display.  Shows Days.Hours:Minutes:Seconds
+    2) Add OSCCAL Delta value to eeprom to allow OSCAL to be adjusted
+    3) Add CAL_DATA_VERSION to eeprom to verify that the calibration data is 
+        what we expect -- and to make it easy to force it to be rewritten.
+
+    Note: The sketch size is now 5702 bytes and you must edit the 
+            ..\Arduino\hardware\attiny\boards.txt
+            file to know that the TRINKET has 8192 bytes, not 5310.
+
    Updated by Eugene Skopal on 1-Dec-2013:
     1) Compute the calibration value for 2.56v reference
     2) Read currents up to 2.56 Amps
@@ -18,21 +54,22 @@
     4) Blink Green LED at .5 hz if watts > 5.125, display watts as 6,7,8,9,10
     5) Blink Flashing Green LED if low voltage and high watts
         (Flashes 4 times in one second, then off for one second)
+        
    Updated by Eugene Skopal on 29-Nov-2013:
     1) Use TimerSerial a timer based UART simulation so that the
-      charlieplexed lights don't flicker when outputting text.
-      (The SoftwareSerial code disables interrupts when outputting characters
-        causing the charlieplexing routine to stall long enough for it to
-        be noticable.)
+        charlieplexed lights don't flicker when outputting text.
+        (The SoftwareSerial code disables interrupts when outputting characters
+          causing the charlieplexing routine to stall long enough for it to
+          be noticable.)
     2) Allow the user to plug the Power Gauge into a known accurate
-      5.0v USB port and reset the calibration value so that the 
-      reported voltage levels are more accurate.
-      When programming the first time, simply plug the USB Power Gauge
-      into a known accurate 5.0v source immediately after programming.
-      After that, you can force a recalibration by grouding the TX pin
-      through a 1K resistor for 3 seconds.
+        5.0v USB port and reset the calibration value so that the 
+        reported voltage levels are more accurate.
+        When programming the first time, simply plug the USB Power Gauge
+        into a known accurate 5.0v source immediately after programming.
+        After that, you can force a recalibration by grouding the TX pin
+        through a 1K resistor for 3 seconds.
     3) Fix the LED display routines so that the LSB blue light doesn't flash
-      randomly when very low current levels are seen.
+        randomly when very low current levels are seen.
     4) Average the ADC readings for one second to eliminate noise.
     5) Display the peak current reading each second.
 ****************************************/
@@ -50,6 +87,12 @@
 
 TimerSerial ts;           // Our Timer Based Serial Port
 
+#define MY_OSCCAL_DELTA  -4
+
+#define CAL_DATA_VERSION    0xE2      // Identifier for valid calibration information
+
+int8_t      factoryOsccal;
+int8_t      calOsccalDelta;
 uint16_t    calVbg11;
 uint16_t    calVbg256;
 uint8_t     calCount;
@@ -81,6 +124,29 @@ bool        updateCal = false;
 uint16_t    greenLedFlashIntervals = 0;
 uint8_t     greenLedSlowBlink = 0;
 
+uint8_t     days;
+uint8_t     hours;
+uint8_t     minutes;
+uint8_t     seconds;
+
+void clockTick() {
+  seconds++;
+  if (seconds > 59) {
+    seconds = 0;
+    minutes++;
+    if (minutes > 59) {
+      minutes = 0;
+      hours++;
+      if (hours > 23) {
+        hours = 0;
+        if (days != 0xFF) {
+          days++;
+        }
+      }
+    }
+  }                    
+}  
+
 void TIMER1_Handler() {
   // turn all LEDs off
   allInputs();
@@ -106,7 +172,7 @@ void TIMER1_Handler() {
   // Print a report once per second
 
   intervals++;
-  if (intervals > TIMERSERIAL_INTERVALS_PER_SEC) {
+  if (intervals >= TIMERSERIAL_INTERVALS_PER_SEC) {
     doReport = true;
     intervals = 0;
   }
@@ -135,13 +201,21 @@ void showLEDS(void) {
 }
 
 void showCal(void) {
-  ts.print(F("cal 1.1: "));
+  ts.print(F("OSCCAL delta: "));
+  ts.print(calOsccalDelta);  
+  ts.print(F("  factory: "));
+  ts.print((uint8_t)factoryOsccal, HEX);
+  ts.print(F("  now: "));
+  ts.print((uint8_t)OSCCAL, HEX);
+
+  ts.print(F("\r\ncal 1.1: "));
   ts.print(calVbg11);
   ts.print(F("  cal 2.56: "));
   ts.print(calVbg256);
   ts.print(F("  write count: "));
   ts.print(calCount);
-  ts.print(F("  VBG adc: "));
+  
+  ts.print(F("\r\nVBG adc: "));
   uint16_t vbg = readVBG();
   ts.print(vbg);
   ts.print(F("  Xfer 2.56 adc: "));
@@ -150,6 +224,7 @@ void showCal(void) {
   ts.print(getVCC(vbg, calVbg11));
   ts.print(F("  5v cal: "));
   ts.print(getCal5v(vbg));
+  
   ts.print(F("\r\n"));
 }
 
@@ -172,11 +247,14 @@ void updateCalibration(void) {
   calVbg11 = getCal5v(vbg);        // Get the new calibration value
   xfer256 /=cnt;                  // Get the average Xfer function
   calVbg256 = (uint16_t)(((uint32_t)calVbg11 * 1024) / (uint16_t)xfer256);
-  EEPROM.write(0, (calVbg11 >> 8) & 0xFF);
-  EEPROM.write(1, calVbg11 & 0xFF);
-  EEPROM.write(2, (calVbg256 >> 8) & 0xFF);
-  EEPROM.write(3, calVbg256 & 0xFF);
-  EEPROM.write(4, ++calCount);
+  EEPROM.write(0, CAL_DATA_VERSION);
+  EEPROM.write(1, calOsccalDelta);
+  EEPROM.write(2, (calVbg11 >> 8) & 0xFF);
+  EEPROM.write(3, calVbg11 & 0xFF);
+  EEPROM.write(4, (calVbg256 >> 8) & 0xFF);
+  EEPROM.write(5, calVbg256 & 0xFF);
+  EEPROM.write(6, ++calCount);
+  EEPROM.write(7, (CAL_DATA_VERSION ^ 0xFF));
 
   ts.print(F("** wrote "));
   showCal();
@@ -187,7 +265,9 @@ void updateCalibration(void) {
 }
 
 // the setup routine runs once when you press reset:
-void setup() {                
+void setup() {
+  uint8_t   calVersion;
+
   allInputs();
 
   ts.begin();           // UART emulation uses TIMER1
@@ -201,22 +281,32 @@ void setup() {
   ts.print(F("[To calibrate voltage, ground TX via 1K resistor for 3 seconds with 5.0 volt supply]\r\n"));
   
   // read calibration
-  calVbg11 = EEPROM.read(0);
-  calVbg11 <<= 8;
-  calVbg11 |= EEPROM.read(1);
-  calVbg256 = EEPROM.read(2);
-  calVbg256 <<= 8;
-  calVbg256 |= EEPROM.read(3);
-  calCount = EEPROM.read(4);        // How many times has it been written
+  calVersion = EEPROM.read(0);
+  if (calVersion == CAL_DATA_VERSION) {
+    calOsccalDelta = EEPROM.read(1);
+    calVbg11 = EEPROM.read(2);
+    calVbg11 <<= 8;
+    calVbg11 |= EEPROM.read(3);
+    calVbg256 = EEPROM.read(4);
+    calVbg256 <<= 8;
+    calVbg256 |= EEPROM.read(5);
+    calCount = EEPROM.read(6);        // How many times has it been written
+    calVersion = (EEPROM.read(7) ^ 0xFF);
+  }    
   // Check that the values are rational (datasheet 1.0 to 1.2 and 2.3 to 2.8)
-  if ( (calVbg11 < 900) || (calVbg11 > 1300) || (calVbg256 < 2200) || (calVbg256 > 2900) ) {
+  if ( (calVersion != CAL_DATA_VERSION) ||
+       (calVbg11 < 900) || (calVbg11 > 1300) || 
+       (calVbg256 < 2200) || (calVbg256 > 2900) ) {
+
+    calOsccalDelta = MY_OSCCAL_DELTA;       // Reset the OSCCAL delta to our default
     calVbg11  = 0xFFFF;       // calibration value is suspect
     calVbg256 = 0xFFFF;
-    calCount  = 0xFF;         // so is the count
+    calCount  = 0;            // so is the count
+
   }
-  if (calCount == 0xFF) {
-    calCount = 0;
-  }
+  
+  factoryOsccal = OSCCAL;
+  OSCCAL = factoryOsccal + calOsccalDelta;
   
   showCal();
   
@@ -262,7 +352,9 @@ void loop() {
 
   while (doReport) {
     doReport = false;
+    clockTick();        // One second has elapsed
     litLEDs = 0;        // Clear the LEDS
+    
     for (uint8_t i=0; i<6; i++) Ldim[i] = MAXPWM;   // If we turn one on, make it bright
     
     txPinState = ts.readTXpin(); // Read the TX pin
@@ -306,9 +398,29 @@ void loop() {
     icc = icc + count / 2;
     icc = icc/count;
 
+    if (days > 0) {
+      ts.print(days);
+      ts.print('.');
+    }
+    if (hours > 0) {
+      if ((hours < 10) && (days > 0)) {
+        ts.print('0');
+      }
+      ts.print(hours);
+    }
+    if (minutes < 10) {
+      ts.print('0');
+    }
+    ts.print(minutes);
+    ts.print(':');
+    if (seconds < 10) {
+      ts.print('0');
+    }
+    ts.print(seconds);
+                              
     watt = vcc * icc;
     watt /= 1000;
-    ts.print(F("V: "));
+    ts.print(F(" V: "));
     vcc += 50; // this is essentially a way to 'round up'
     printDotDecimal(vcc, 1);
     ts.print(F(" I: ")); 

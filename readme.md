@@ -1,5 +1,39 @@
 USB Power Gauge updates by Eugene Skopal
 ===============
+Version 2.3 -- 01-Jan-2014
+--------------------------
+Observations / Changes
+----------------------
+User wbphelps suggested adding time stamps to the reports emitted by the USB Power Gauge.  He also reported issues with the RC Oscillator timing, which becomes more obvious when watching timestamps over a few minutes.
+
+I added timestamps to the printouts.  The time is not very accurate as it is based on the internal RC Oscillator - but it does give you an sense of how long charging or other activities have been running.
+
+I added the ability to adjust the RC Oscillator.  From the source code:
+
+    You can now calibrate the RC Oscillator by using a terminal program that can
+    display the time each message is received in milliseconds.  I use TERMINAL
+    by Bray++ from https://sites.google.com/site/terminalbpp/.
+       
+    Compile and load this program into your USB Power Gauge and let it run.  
+    It is set to alter the OSCCAL by a value of -4 which was correct for the
+    USB POWER GAUGE I received.
+    Simply watch the program run for awhile in TERMINAL with its Time option checked.
+    If the timestamps are occurring too soon: (e.g. 1.400 then 2.350 then 3.270) 
+      edit MY_OSCCAL_DELTA to be more negative -4 becomes -5.
+    If the timestamps are occurring too late: (e.g. 1.400 then 2.500 then 3.590) 
+      edit MY_OSCCAL_DELTA to be more positive -4 becomes -3.
+    You must also edit CAL_DATA_VERSION to a different value (e.g. E2 becomes E3) in
+    order to force the OSCCAL delta calibration value to be updated.
+    Once you have edited the values go back to step 1 until you see the timestamps
+    occurring both too soon and too late.
+    Finally, you need to plug the USB POWER GAUGE into an accurate 5V USB port to reset
+    the 5V calibration value.
+    
+    There are two overlapping ranges of OSCCAL values, 0-0x7F and 0x80-0xFF.  My factory value
+    is 0x86.  If I were to set MY_OSCCAL_DELTA to -7, that would move me into the top of the 
+    other range and the oscillator would suddenly go much faster.  In that case I would then 
+    need a much larger delta (like -30) to continue to slow down the RC oscillator.
+
 Version 2.2 -- 02-Dec-2013
 --------------------------
 Observations / Changes
