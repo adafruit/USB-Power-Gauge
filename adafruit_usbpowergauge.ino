@@ -36,7 +36,10 @@
     other range and the oscillator would suddenly go much faster.  In that case I would then 
     need a much larger delta (like -30) to continue to slow down the RC oscillator.
     --------------------------------------------------------------------------------    
-       
+   Updated by Eugene Skopal on 12-Jan-2014:
+    1) Update LED info before printing our report to minimize green LED flicker.
+    2) Breakup code into subroutines to make code more readable.
+          
    Updated by Eugene Skopal on 10-Jan-2014:
     1) Added timestamps to display.  Shows Days.Hours:Minutes:Seconds
     2) Add OSCCAL Delta value to eeprom to allow OSCAL to be adjusted
@@ -336,6 +339,133 @@ void printDotDecimal(uint16_t x, uint8_t d) {
   }
 }
 
+int8_t __inline__ checkTxPinAndUpdateCal() {
+  txPinState = ts.readTXpin();  // Read the TX pin
+  ts.endCheckTxPin();           // Back to UART mode
+
+  if (txPinState == 0) {
+    // The pin is low (someone is signaling us)
+    txPinLowCount++;
+    if (txPinLowCount == 0) {
+      txPinLowCount = 0xFF;     // Handle overflow
+    }
+    if (txPinLowCount > 2) {
+      updateCal = true;         // We want to update the Calibration value
+      greenLedFlashIntervals = (TIMERSERIAL_INTERVALS_PER_SEC / 8); // blink 4 times per second
+      litLEDs = _BV(5) | _BV(4) | _BV(3);
+    }
+    litLEDs |= _BV(5);
+    if (txPinLowCount > 1) {
+        litLEDs |= _BV(4);
+    }
+  } else {
+    // The pin is high (this is normal)
+    txPinLowCount = 0;
+    if (updateCal) {
+      updateCalibration();      // Update the calibration value
+
+      updateCal = false;
+      greenLedFlashIntervals = 0;
+      return true;              // We did update the CAL
+    }
+  }
+  return false;       // We did not update the CAL
+}
+  
+void __inline__ showNormalLedInfo() {
+  // for OK voltages, turn on the green 'OK' LED
+  if (vcc >= 4500) {
+    litLEDs |= 0x1;
+    greenLedFlashIntervals = 0;
+  } else {
+    // blink quickly (flash) to indicate a problem
+    greenLedFlashIntervals = (TIMERSERIAL_INTERVALS_PER_SEC / 8); // blink 4 times per second
+  }
+  if (watt > (5000 + 1000/4) ) {
+    // We are over 5000 watts enough to light the first blue led
+    if (++greenLedSlowBlink == 5) {
+      greenLedSlowBlink = 1;
+    }          
+    watt -= 5000;
+  } else {
+    greenLedSlowBlink = 0;
+  }                
+
+  for (uint16_t w=1; w<6; w++) {
+    if (watt > (w*1000)) {
+      // on all the way
+      litLEDs |= _BV(w);
+    } else if (watt > (w-1)*1000) {
+      // on partially
+      litLEDs |= _BV(w);
+      Ldim[w] = gamma[(watt % 1000) / 125];
+    } else {
+      litLEDs &= ~_BV(w);
+    }
+  }
+}
+
+void __inline__ showSpecialLedInfo() {
+  uint8_t blinkingLedIsOn;
+  if (greenLedSlowBlink == 0) {
+    blinkingLedIsOn = 1;
+  } else {
+    blinkingLedIsOn = greenLedSlowBlink & 1;
+  }      
+  uint8_t flashingLedIsOn = 1;      
+  if (greenLedFlashIntervals != 0) {
+    flashingLedIsOn = intervals / greenLedFlashIntervals;
+    flashingLedIsOn = (flashingLedIsOn & 1) ^ 1;    // Interval 0 is ON
+  }        
+  if ((flashingLedIsOn && blinkingLedIsOn)) {
+    litLEDs |= 1;
+  } else {
+    litLEDs &= ~1;
+  }
+}
+
+void __inline__ printLoggingInfo() {
+  if (days > 0) {
+    ts.print(days);
+    ts.print('.');
+  }
+  if (hours > 0) {
+    if ((hours < 10) && (days > 0)) {
+      ts.print('0');
+    }
+    ts.print(hours);
+    ts.print(':');
+  }
+  if (minutes < 10) {
+    ts.print('0');
+  }
+  ts.print(minutes);
+  ts.print(':');
+  if (seconds < 10) {
+    ts.print('0');
+  }
+  ts.print(seconds);
+
+  ts.print(F(" V: "));
+  vcc += 50; // this is essentially a way to 'round up'
+  printDotDecimal(vcc, 1);
+
+  ts.print(F(" I: ")); 
+  if (icc < 100) ts.print(' ');
+  if (icc < 10) ts.print(' ');
+  ts.print(icc);
+
+  ts.print(F(" mA  Ipk: "));
+  if (iccPeak < 100) ts.print(' ');
+  if (iccPeak < 10) ts.print(' ');
+  ts.print(iccPeak);
+
+  ts.print(F(" mA  Watts: ")); 
+  watt += 50; // this is essentially a way to 'round up'
+  printDotDecimal(watt, 1);
+  ts.print(F("\r\n"));
+}
+
 // the loop routine runs over and over again forever:
 void loop() {
   vcc += readVCC();
@@ -346,151 +476,63 @@ void loop() {
   icc += iccNow;
   
   count++;
-  if (ts.txBusy() == false) {
-    ts.beginCheckTxPin();      // Prepare to read the state of the TX pin
+  if (ts.txBusy() == false) {   // Are we done sending our report?
+    ts.beginCheckTxPin();       //  yes. Then prepare to read the state of the TX pin
   }
 
-  while (doReport) {
-    doReport = false;
-    clockTick();        // One second has elapsed
-    litLEDs = 0;        // Clear the LEDS
+  if (doReport) {
     
-    for (uint8_t i=0; i<6; i++) Ldim[i] = MAXPWM;   // If we turn one on, make it bright
+    // Clear the LEDS so that we can update them
+
+    litLEDs = 0;
+    for (uint8_t i=0; i<6; i++) Ldim[i] = MAXPWM;   // If we turn on a LED, make it bright
     
-    txPinState = ts.readTXpin(); // Read the TX pin
-    ts.endCheckTxPin();         // Back to UART mode
-
-    if (txPinState == 0) {
-      // The pin is low (someone is signaling us)
-      txPinLowCount++;
-      if (txPinLowCount == 0) {
-        txPinLowCount = 0xFF;     // Handle overflow
-      }
-      if (txPinLowCount > 2) {
-        updateCal = true;            // We want to update the Calibration value
-        greenLedFlashIntervals = (TIMERSERIAL_INTERVALS_PER_SEC / 8); // blink 4 times per second
-        litLEDs = _BV(5) | _BV(4) | _BV(3);
-      }
-      litLEDs |= _BV(5);
-      if (txPinLowCount > 1) {
-          litLEDs |= _BV(4);
-      }
-    } else {
-      // The pin is high (this is normal)
-      txPinLowCount = 0;
-      if (updateCal) {
-        updateCalibration();        // Update the calibration value
-
-        updateCal = false;
-        greenLedFlashIntervals = 0;
-        
-        vcc = 0;                    // Toss old values
-        icc = 0;
-        iccPeak = 0;
-        count = 0;
-        break;                  // Skip this reporting cycle
-      }
-    }
+    // Check the TX pin, update the calibration info if needed, 
+    //  and setup any special LED displays if needed
     
-    vcc = vcc + count / 2;
-    vcc = vcc/count;
+    if (checkTxPinAndUpdateCal()) {
 
-    icc = icc + count / 2;
-    icc = icc/count;
+      // If we updated the Calibration -- reset everything                   
 
-    if (days > 0) {
-      ts.print(days);
-      ts.print('.');
-    }
-    if (hours > 0) {
-      if ((hours < 10) && (days > 0)) {
-        ts.print('0');
-      }
-      ts.print(hours);
-      ts.print(':');
-    }
-    if (minutes < 10) {
-      ts.print('0');
-    }
-    ts.print(minutes);
-    ts.print(':');
-    if (seconds < 10) {
-      ts.print('0');
-    }
-    ts.print(seconds);
+      vcc = 0;                    // Toss old values
+      icc = 0;
+      iccPeak = 0;
+      count = 0;
+      doReport = false;
+
+    } else {        
+
+      // Update our averages
+    
+      vcc = vcc + count / 2;
+      vcc = vcc/count;
+
+      icc = icc + count / 2;
+      icc = icc/count;
                               
-    watt = vcc * icc;
-    watt /= 1000;
-    ts.print(F(" V: "));
-    vcc += 50; // this is essentially a way to 'round up'
-    printDotDecimal(vcc, 1);
-    ts.print(F(" I: ")); 
-    if (icc < 100) ts.print(' ');
-    if (icc < 10) ts.print(' ');
-    ts.print(icc);
-    ts.print(F(" mA  Ipk: "));
-    if (iccPeak < 100) ts.print(' ');
-    if (iccPeak < 10) ts.print(' ');
-    ts.print(iccPeak);
-    ts.print(F(" mA  Watts: ")); 
-    watt += 50; // this is essentially a way to 'round up'
-    printDotDecimal(watt, 1);
-    ts.print(F("\r\n"));
-    iccPeak = 0;
-    count = 1;
-  }
+      watt = vcc * icc;
+      watt /= 1000;
+    }
+  }    
 
+  // Update the information the LEDS display
+  
   if (litLEDs == 0) {
-    // Show normal LED information
-    
-    // for OK voltages, turn on the green 'OK' LED
-    if (vcc >= 4500) {
-      litLEDs |= 0x1;
-      greenLedFlashIntervals = 0;
-    } else {
-      // blink quickly (flash) to indicate a problem
-      greenLedFlashIntervals = (TIMERSERIAL_INTERVALS_PER_SEC / 8); // blink 4 times per second
-    }
-    if (watt > (5000 + 1000/4) ) {
-      // We are over 5000 watts enough to light the first blue led
-      if (++greenLedSlowBlink == 5) {
-        greenLedSlowBlink = 1;
-      }          
-      watt -= 5000;
-    } else {
-      greenLedSlowBlink = 0;
-    }                
-
-    for (uint16_t w=1; w<6; w++) {
-      if (watt > (w*1000)) {
-        // on all the way
-        litLEDs |= _BV(w);
-      } else if (watt > (w-1)*1000) {
-        // on partially
-        litLEDs |= _BV(w);
-        Ldim[w] = gamma[(watt % 1000) / 125];
-      } else {
-        litLEDs &= ~_BV(w);
-      }
-    }
+    showNormalLedInfo();
   } else {
-    // Show Special LED information
-
-    uint8_t blinkingLedIsOn;
-    if (greenLedSlowBlink == 0) {
-      blinkingLedIsOn = 1;
-    } else {
-      blinkingLedIsOn = greenLedSlowBlink & 1;
-    }      
-    uint8_t flashingLedIsOn = 1;      
-    if (greenLedFlashIntervals != 0) {
-      flashingLedIsOn = intervals / greenLedFlashIntervals;
-      flashingLedIsOn = (flashingLedIsOn & 1) ^ 1;    // Interval 0 is ON
-    }        
-    if ((flashingLedIsOn && blinkingLedIsOn)) {
-      litLEDs |= 1;
-    } else {
-      litLEDs &= ~1;
-    }
+    showSpecialLedInfo();
   }
+  
+  // Print another line of information
+  
+  if (doReport) {
+    doReport = false;   // Only do this once
+
+    clockTick();        // One second has elapsed
+
+    printLoggingInfo();
+
+    iccPeak = 0;        // Reset our peak value
+    count = 1;          // and our count
+  }    
 }
