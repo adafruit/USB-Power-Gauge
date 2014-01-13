@@ -17,13 +17,13 @@
     by Bray++ from https://sites.google.com/site/terminalbpp/.
        
     Compile and load this program into your USB Power Gauge and let it run.  
-    It is set to alter the OSCCAL by a value of -3 which was correct for the
+    It is set to alter the OSCCAL by a value of -4 which was correct for the
     USB POWER GAUGE I received.
     Simply watch the program run for awhile in TERMINAL with its Time option checked.
     If the timestamps are occurring too soon: (e.g. 1.400 then 2.350 then 3.270) 
-      edit MY_OSCCAL_DELTA to be more negative -3 becomes -4.
+      edit MY_OSCCAL_DELTA to be more negative -4 becomes -5.
     If the timestamps are occurring too late: (e.g. 1.400 then 2.500 then 3.590) 
-      edit MY_OSCCAL_DELTA to be more positive -3 becomes -2.
+      edit MY_OSCCAL_DELTA to be more positive -4 becomes -3.
     You must also edit CAL_DATA_VERSION to a different value (e.g. E2 becomes E3) in
     order to force the OSCCAL delta calibration value to be updated.
     Once you have edited the values go back to step 1 until you see the timestamps
@@ -39,6 +39,9 @@
    Updated by Eugene Skopal on 12-Jan-2014:
     1) Update LED info before printing our report to minimize green LED flicker.
     2) Breakup code into subroutines to make code more readable.
+    3) Increase Output Buffer size to accomidate time stamps.
+    4) Remove unneeded volatile keywords.
+    5) Added more comments.
           
    Updated by Eugene Skopal on 10-Jan-2014:
     1) Added timestamps to display.  Shows Days.Hours:Minutes:Seconds
@@ -90,7 +93,7 @@
 
 TimerSerial ts;           // Our Timer Based Serial Port
 
-#define MY_OSCCAL_DELTA  -3
+#define MY_OSCCAL_DELTA  -4
 
 #define CAL_DATA_VERSION    0xE2      // Identifier for valid calibration information
 
@@ -110,45 +113,28 @@ uint32_t  icc;
 uint32_t  iccPeak;
 uint32_t  watt;
 uint8_t   count = 0;
+
 volatile  bool       doReport = false;
 volatile  uint16_t   intervals = 0;
 
-volatile uint8_t x = 0;
-volatile uint8_t Lidx = 0, litLEDs = 0;
-volatile uint8_t Ldim[6] = {0,0,0,0,0,0};
+uint8_t   Lidx = 0;
+uint8_t   litLEDs = 0;
+uint8_t   Ldim[6] = {0,0,0,0,0,0};
 
-volatile uint8_t pwm=0;
+uint8_t   pwm=0;
 #define MAXPWM 32
-uint8_t gamma[] = {0x0, 0x01, 0x03, 0x06, 0x0A, 0x10, 0x17, 0x20};
+uint8_t   gamma[] = {0x0, 0x01, 0x03, 0x06, 0x0A, 0x10, 0x17, 0x20};
 
-uint8_t     txPinState = 0;
-uint8_t     txPinLowCount = 0;
-bool        updateCal = false;
-uint16_t    greenLedFlashIntervals = 0;
-uint8_t     greenLedSlowBlink = 0;
+uint8_t   txPinState = 0;
+uint8_t   txPinLowCount = 0;
+bool      updateCal = false;
+uint16_t  greenLedFlashIntervals = 0;
+uint8_t   greenLedSlowBlink = 0;
 
-uint8_t     days;
-uint8_t     hours;
-uint8_t     minutes;
-uint8_t     seconds;
-
-void clockTick() {
-  seconds++;
-  if (seconds > 59) {
-    seconds = 0;
-    minutes++;
-    if (minutes > 59) {
-      minutes = 0;
-      hours++;
-      if (hours > 23) {
-        hours = 0;
-        if (days != 0xFF) {
-          days++;
-        }
-      }
-    }
-  }                    
-}  
+uint8_t   days;
+uint8_t   hours;
+uint8_t   minutes;
+uint8_t   seconds;
 
 void TIMER1_Handler() {
   // turn all LEDs off
@@ -172,7 +158,7 @@ void TIMER1_Handler() {
       pwm = 0;
   }
 
-  // Print a report once per second
+  // Set a flag once per second so that we print our report
 
   intervals++;
   if (intervals >= TIMERSERIAL_INTERVALS_PER_SEC) {
@@ -180,6 +166,9 @@ void TIMER1_Handler() {
     intervals = 0;
   }
 }
+
+// Flash all the LEDS count times to show that we are 
+//  writing the eeprom.
 
 void flashLEDS(uint8_t count) {
   for (uint8_t i=0; i<6; i++) Ldim[i] = MAXPWM;
@@ -190,6 +179,8 @@ void flashLEDS(uint8_t count) {
     delay(250);
   }
 }
+
+// Turn on all the LEDS for a little bit to show that we are alive
 
 void showLEDS(void) {
   flashLEDS(1);
@@ -202,6 +193,8 @@ void showLEDS(void) {
   }
   litLEDs = 0;
 }
+
+// Print out our calibration information
 
 void showCal(void) {
   ts.print(F("OSCCAL delta: "));
@@ -246,9 +239,9 @@ void updateCalibration(void) {
     xfer256 += readXfer256();
     cnt++;
   }
-  vbg /= cnt;               // Get the average value
-  calVbg11 = getCal5v(vbg);        // Get the new calibration value
-  xfer256 /=cnt;                  // Get the average Xfer function
+  vbg /= cnt;                   // Get the average value
+  calVbg11 = getCal5v(vbg);     // Get the new calibration value
+  xfer256 /=cnt;                // Get the average Xfer function
   calVbg256 = (uint16_t)(((uint32_t)calVbg11 * 1024) / (uint16_t)xfer256);
   EEPROM.write(0, CAL_DATA_VERSION);
   EEPROM.write(1, calOsccalDelta);
@@ -305,7 +298,6 @@ void setup() {
     calVbg11  = 0xFFFF;       // calibration value is suspect
     calVbg256 = 0xFFFF;
     calCount  = 0;            // so is the count
-
   }
   
   factoryOsccal = OSCCAL;
@@ -338,6 +330,10 @@ void printDotDecimal(uint16_t x, uint8_t d) {
     ts.print(x / 10);
   }
 }
+
+// This is called once a second to monitor the TX pin and setup the 
+//  LEDS to show our special states if we are preparing to rewrite
+//  the calibration information.
 
 int8_t __inline__ checkTxPinAndUpdateCal() {
   txPinState = ts.readTXpin();  // Read the TX pin
@@ -372,6 +368,9 @@ int8_t __inline__ checkTxPinAndUpdateCal() {
   return false;       // We did not update the CAL
 }
   
+// This is called once a second to show to update the LEDS to show the
+//  normal voltage and watts display.
+
 void __inline__ showNormalLedInfo() {
   // for OK voltages, turn on the green 'OK' LED
   if (vcc >= 4500) {
@@ -405,6 +404,10 @@ void __inline__ showNormalLedInfo() {
   }
 }
 
+// If the user has grounded the TX pin, this is called once a second to show
+//  our special state (preparing to rewrite the calibration info) on the LEDS
+//  instead of our normal voltage and watts display.
+
 void __inline__ showSpecialLedInfo() {
   uint8_t blinkingLedIsOn;
   if (greenLedSlowBlink == 0) {
@@ -423,6 +426,28 @@ void __inline__ showSpecialLedInfo() {
     litLEDs &= ~1;
   }
 }
+
+// This is called once a second to update the Days.Hours:Minutes:Seconds variables
+
+void __inline__ clockTick() {
+  seconds++;
+  if (seconds > 59) {
+    seconds = 0;
+    minutes++;
+    if (minutes > 59) {
+      minutes = 0;
+      hours++;
+      if (hours > 23) {
+        hours = 0;
+        if (days != 0xFF) {
+          days++;
+        }
+      }
+    }
+  }                    
+}
+
+// This is called once per second to log our voltage and current information  
 
 void __inline__ printLoggingInfo() {
   if (days > 0) {

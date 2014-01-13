@@ -27,7 +27,7 @@
 #ifndef TIMERSERIAL_TX_ONLY
   #define TIMERSERIAL_IN_BUF_SIZE   8
 #endif
-#define TIMERSERIAL_OUT_BUF_SIZE  40
+#define TIMERSERIAL_OUT_BUF_SIZE  60
 
 #if defined (__AVR_ATtiny85__)
 /* 

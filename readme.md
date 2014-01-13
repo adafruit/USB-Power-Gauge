@@ -1,6 +1,18 @@
 USB Power Gauge updates by Eugene Skopal
 ===============
-Version 2.3 -- 01-Jan-2014
+Version 2.4 -- 12-Jan-2014
+--------------------------
+Observations / Changes
+----------------------
+I noticed the green led was flickering again.  I cleaned up the code quite a bit and increased the buffer size to accomidate the new timestamp.
+
+    1) Update LED info before printing our report to minimize green LED flicker.
+    2) Breakup code into subroutines to make code more readable.
+    3) Increase Output Buffer size to accomidate time stamps.
+    4) Remove unneeded volatile keywords.
+    5) Added more comments.
+
+Version 2.3 -- 10-Jan-2014
 --------------------------
 Observations / Changes
 ----------------------
@@ -15,13 +27,13 @@ I added the ability to adjust the RC Oscillator.  From the source code:
     by Bray++ from https://sites.google.com/site/terminalbpp/.
        
     Compile and load this program into your USB Power Gauge and let it run.  
-    It is set to alter the OSCCAL by a value of -3 which was correct for the
+    It is set to alter the OSCCAL by a value of -4 which was correct for the
     USB POWER GAUGE I received.
     Simply watch the program run for awhile in TERMINAL with its Time option checked.
     If the timestamps are occurring too soon: (e.g. 1.400 then 2.350 then 3.270) 
-      edit MY_OSCCAL_DELTA to be more negative -3 becomes -4.
+      edit MY_OSCCAL_DELTA to be more negative -4 becomes -5.
     If the timestamps are occurring too late: (e.g. 1.400 then 2.500 then 3.590) 
-      edit MY_OSCCAL_DELTA to be more positive -3 becomes -2.
+      edit MY_OSCCAL_DELTA to be more positive -4 becomes -3.
     You must also edit CAL_DATA_VERSION to a different value (e.g. E2 becomes E3) in
     order to force the OSCCAL delta calibration value to be updated.
     Once you have edited the values go back to step 1 until you see the timestamps
