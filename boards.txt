@@ -1,0 +1,41 @@
+##############################################################
+
+gemma.name=Adafruit Gemma 8MHz
+gemma.bootloader.low_fuses=0xF1
+gemma.bootloader.high_fuses=0xD5
+gemma.bootloader.extended_fuses=0xFE
+gemma.upload.maximum_size=5310
+gemma.build.mcu=attiny85
+gemma.build.f_cpu=8000000L
+gemma.build.core=arduino:arduino
+gemma.build.variant=tiny8
+
+trinket3.name=Adafruit Trinket 8MHz
+trinket3.bootloader.low_fuses=0xF1
+trinket3.bootloader.high_fuses=0xD5
+trinket3.bootloader.extended_fuses=0xFE
+trinket3.upload.maximum_size=5310
+trinket3.build.mcu=attiny85
+trinket3.build.f_cpu=8000000L
+trinket3.build.core=arduino:arduino
+trinket3.build.variant=tiny8
+
+trinket5.name=Adafruit Trinket 16MHz
+trinket5.bootloader.low_fuses=0xF1
+trinket5.bootloader.high_fuses=0xD5
+trinket5.bootloader.extended_fuses=0xFE
+trinket5.upload.maximum_size=5310
+trinket5.build.mcu=attiny85
+trinket5.build.f_cpu=16000000L
+trinket5.build.core=arduino:arduino
+trinket5.build.variant=tiny8
+
+usbpowergauge.name=Adafruit USB Power Gauge
+usbpowergauge.bootloader.low_fuses=0xF1
+usbpowergauge.bootloader.high_fuses=0xD5
+usbpowergauge.bootloader.extended_fuses=0xFE
+usbpowergauge.upload.maximum_size=8192
+usbpowergauge.build.mcu=attiny85
+usbpowergauge.build.f_cpu=16000000L
+usbpowergauge.build.core=arduino:arduino
+usbpowergauge.build.variant=tiny8
